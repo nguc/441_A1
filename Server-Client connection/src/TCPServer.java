@@ -29,6 +29,7 @@ public class TCPServer {
 					socket.getInputStream()));
 
 			// Respond to messages from the client
+			/*
 			while (true) {
 				s = inputStream.nextLine(); // keeps reading until it reads a \n - it will get rid of the \n
 				System.out.println(s);
@@ -42,7 +43,7 @@ public class TCPServer {
 
 				outputStream.println(s); // sending string to an output stream (file) adds a \n to end of the line
 				outputStream.flush(); // forces program to send string asap
-			}
+			}*/
 
 			// closing the streams
 			inputStream.close();

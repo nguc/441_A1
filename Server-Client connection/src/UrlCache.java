@@ -7,11 +7,11 @@
 
 import java.io.*;
 import java.util.*;
-import java.net.Socket;
+import java.net.*;
 
 public class UrlCache {
 	
-	HashMap<String, String> catalog = new HashMap<String, String>();
+	HashMap<String, String> catalog;
 	
     /**
      * Default constructor to initialize data structures used for caching/etc
@@ -20,7 +20,7 @@ public class UrlCache {
      * @throws IOException if encounters any errors/exceptions
      */
 	public UrlCache() throws IOException {
-				
+		// initiallize catalog here!		
 		
 	}
 	
@@ -31,18 +31,16 @@ public class UrlCache {
      * @throws IOException if encounters any errors/exceptions
      */
 	public void getObject(String url) throws IOException {
-		Scanner inputStream;
-		PrintWriter outputStream;
-		Scanner userInput;
-		String request, reply;
+		
 		
 		// parse the url by / and : to get the separate tokens
 		String[] tokens = url.split("/|:");
 		//for (int i =0; i < tokens.length; i++){System.out.println("tokens: " + tokens[i]);}
-		
+		String hostName = tokens[0];
+		String fileName = tokens[tokens.length -1];
 		// checks if 2nd token is a specific port number and sets it, else use port 80
 		int portNum = getPortNumber(tokens[1]);
-		System.out.println("Port number is " + portNum);
+		//System.out.println("Port number is " + portNum);
 		
 		// check if filename in catalog. if not then dl, else check last mod date
 		
@@ -50,31 +48,67 @@ public class UrlCache {
 		// Open a TCP connection to server
 		try
 		{
-			Socket socket = new Socket ("localhost", portNum);
-			outputStream = new PrintWriter (new DataOutputStream(socket.getOutputStream()));
-			inputStream = new Scanner(new InputStreamReader(socket.getInputStream()));
-			userInput = new Scanner(System.in);
+			Socket socket = new Socket (hostName, portNum);
+			PrintWriter outputStream = new PrintWriter (socket.getOutputStream());
+			BufferedReader inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 			
-			//while (true) {
-				System.out.println("Sending Request");
-				//request = userInput.nextLine();
-				request = getRequest(tokens);
-				System.out.println("Request: " + request);
-				System.out.println("checking catalog\n");
-				System.out.println(checkCatalog(catalog, request));
+			System.out.println("Sending Request");
+			String HTTPrequest = getRequest(tokens);
+			System.out.println("Request: " + HTTPrequest);
+			
+			//System.out.println("checking catalog\n");
+			//System.out.println(checkCatalog(catalog, request));
+			
+			//send user input message to server. Flush to ensure message is sent
+			outputStream.println(HTTPrequest);
+			outputStream.flush();
+			
+			
+			
+			// reading the reply from server
+			byte[] bytes = new byte[10*1024];
+			int s = 0;
+			int bytesRead = 0;
+			String tmp = "";
+			String lastMod = "";
+			
+			// read and process the header
+			while((tmp=inputStream.readLine()) != null){
+				//tmp=inputStream.readLine();
+				System.out.println("header: " + tmp);
+				if(tmp.isEmpty()) break;
 				
-				//send user input message to server. Flush to ensure message is sent
-				outputStream.println(request);
-				outputStream.flush();
+				if(tmp.contains("200 OK")) {
+					//check catalog
+					System.out.println("checking cataloge");
+					 //if (!inCatalog(fileName)) {
+						 // save file name to catalog
+					 //}
+				}
 				
-				//Get reply from server
-				reply = inputStream.nextLine();
-				System.out.println(reply);
+				else if(tmp.contains("Last-Modified")){
+					//check catalog
+					lastMod = tmp;
+					System.out.println("Updating last modified with: " + tmp);
+				}
+
+			}
+			
+			// read and save the body to a file
+			System.out.println("body");
+			do{
 				
-				// Exit if message from server is "bye"
-				//if (reply.equalsIgnoreCase("bye"))
-					//break;
-			//}
+				s = inputStream.read();
+				bytes[bytesRead] = (byte)s;
+				tmp = new String(bytes);
+				//System.out.println("body: " + tmp);
+				bytesRead++;
+				
+				
+			}while (s != -1);
+			
+			// close the input and output streams
+			socket.close();
 			inputStream.close();
 			outputStream.close();
 		}
@@ -124,7 +158,10 @@ public class UrlCache {
 			return 80;
 	}
 
-	public String getRequest(String[] tokens) {
+	/* 
+	 * Returns the pathname of the object
+	 */
+	public String getPathname(String[] tokens) {
 		String request = "";
 		int i;
 		
@@ -135,24 +172,48 @@ public class UrlCache {
 		
 		while (i < tokens.length)
 		{
-			request = request + "/" + tokens[i];
+			request = request + "/" +tokens[i];
 			i++;
+			//if (i < tokens.length)
+				//request = request + "/";
+				
 		}
 		return request;
 	}
 	
-	// returns the catalog if one exists, else creates a new one
-	public boolean getCatalog() {
-		
+	
+	public String getRequest(String[] tokens) {
+		return "GET " + getPathname(tokens)+ " HTTP/1.0\r\n\r\n";
 	}
+	
+	// returns the catalog if one exists, else creates a new one
+	//public boolean getCatalog() {
+		
+	//}
 	// checks if catalog contains an entry of the request
-	public boolean checkCatalog(HashMap catalog, String url) {
-		if (catalog.get(url).equals(""))
+	public boolean inCatalog(String filename) {
+		// use the url cache method to read the catalog
+		if (catalog.get(filename).equals(""))
 			return false;
 	
 		return true;
 	}
 	
-	
+	public int readHeader(byte[] b, BufferedReader inputStream) throws IOException {
+		int r;
+		int i = 0;
+		String s;
+		
+		while ((r = inputStream.read()) != -1) {
+			b[i] = (byte)r;
+			s = new String(b);
+			System.out.println("s: " + s);
+			if (s.equals("\r\n"))
+				break;
+			i++;
+		}
+		System.out.println("Done header. i = " + i);
+		return i;
+	}
 	
 }
