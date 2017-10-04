@@ -23,10 +23,10 @@ public class UrlCache {
      * @throws IOException if encounters any errors/exceptions
      */
 	public UrlCache() throws IOException {		
-		System.out.println("user.dir = " + System.getProperty("user.dir")+"\\src");
+		//System.out.println("user.dir = " + System.getProperty("user.dir")+"\\src");
 		
 		File file = new File( System.getProperty("user.dir") + "/src/catalog.ser");
-		System.out.println("Parent file " + file.getParentFile());
+		//System.out.println("Parent file " + file.getParentFile());
 		try {
 			// load catalog from saved file if it exists
 			if(file.exists()) {
@@ -67,14 +67,13 @@ public class UrlCache {
 		int portNum = getPortNumber(tokens[1]);
 		
 		// Open a TCP connection to server
-		try
-		{
+		try{
 			boolean saved = false;
 			boolean download = false;
 			
 			// CONDITIONAL GET determines which request we will send, conditional or not
-			//if(inCatalog(url)) 
-				//saved = true; System.out.println("saved = " + saved);
+			if(inCatalog(url)) 
+			 saved = true; System.out.println("saved = " + saved);
 				
 				
 			Socket socket = new Socket (hostName, portNum);
@@ -97,10 +96,10 @@ public class UrlCache {
 			
 			// read and process the header
 			//if (saved == false) {
-				while((tmp=inputStream.readLine()) != null){
+				while(!(tmp=inputStream.readLine()).isEmpty()){
 					System.out.println(tmp);
-					if(tmp.isEmpty()) 
-						break;
+					//if(tmp.isEmpty()) 
+						//break;
 					
 					// If request is OK, then check if catalog contains file 
 					if(tmp.contains("200 OK")) {
@@ -108,6 +107,8 @@ public class UrlCache {
 						if(inCatalog(url)) 
 							saved = true; //System.out.println("saved = " + saved);
 					}
+					else if (tmp.contains("304 OK"))
+						break;
 					
 					// process the last-modified line
 					if(tmp.contains("Last-Modified")){
@@ -119,6 +120,7 @@ public class UrlCache {
 						if(saved == false || (saved == true && !(catalog.get(url).equals(lastMod)))){
 							System.out.println("Adding new entry " + url + " " + lastMod);
 							catalog.put(url, lastMod);
+							saveCatalog();
 							download = true;
 						}
 						// entry exist but no updates, do not download!
@@ -147,25 +149,37 @@ public class UrlCache {
 					file.createNewFile();
 					
 					FileOutputStream fOut = new FileOutputStream(file);
-					
-					byte[] bytes = new byte[16*1024];
+					InputStream in = socket.getInputStream();
+					byte[] bytes = new byte[10*1024];
+					int len = bytes.length;
 					int bytesRead = 0;
-					int i = 0;
-					while ((bytesRead = inputStream.read()) > 0){
-						bytes[i] = (byte)bytesRead;			
-						i++;
-						//fOut.write(bytes, 0, bytesRead);
+					
+					//find end of head and then user mark
+					/*
+					while ((bytesRead = in.read(bytes, 0, len)) != -1){
+						if (bytes == (("\\r\\n").getBytes("UTF-8")))
+							in.mark(bytesRead);
+					}*/
+					
+					
+					//Reset reading stream from mark using reset and save to file
+					in.reset();
+					while ((bytesRead = in.read(bytes, 0, len)) != -1){
+						  fOut.write(bytes);
 					}
 					fOut.write(bytes);
 					fOut.flush();
-					fOut.close();
+					socket.close();
+					/*out.close();
+					in.close();
+					fOut.close();*/
 				} catch (Exception e)	{
 					
 				}
 			}
 			
 			//Save catalog to file and close the input and output streams
-			saveCatalog();
+			
 			inputStream.close();
 			outputStream.close();
 			socket.close();
@@ -256,7 +270,7 @@ public class UrlCache {
 	public String getRequest(String url, String[] tokens, boolean saved) {
 		String get = "GET " + getPathname(tokens)+ " HTTP/1.0\r\n";
 		String host = "Host: " + tokens[0] + "\r\n";
-		String cond = "If-Modified-Since: " + catalog.get(url);
+		String cond = "If-Modified-Since: " + catalog.get(url)+ "\r\n\r\n";
 		String request;
 		
 		if (saved == true)
