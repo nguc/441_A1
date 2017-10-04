@@ -148,17 +148,17 @@ public class UrlCache {
 					
 					FileOutputStream fOut = new FileOutputStream(file);
 					
-					byte[] bytes = new byte[10*1024];
+					byte[] bytes = new byte[16*1024];
 					int bytesRead = 0;
-					while ((bytesRead = inputStream.read(bytes)) > 0){
-						//bytes[bytesRead] = (byte)s;			
-						//bytesRead++;
-						fOut.write(bytes, 0, bytesRead);
+					int i = 0;
+					while ((bytesRead = inputStream.read()) > 0){
+						bytes[i] = (byte)bytesRead;			
+						i++;
+						//fOut.write(bytes, 0, bytesRead);
 					}
-					//fOut.write(bytes);
-					//fOut.flush();
+					fOut.write(bytes);
+					fOut.flush();
 					fOut.close();
-					
 				} catch (Exception e)	{
 					
 				}
