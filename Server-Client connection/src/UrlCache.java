@@ -93,7 +93,7 @@ public class UrlCache {
 			
 			String tmp = "";
 			String lastMod = "";
-			
+			long length;
 			
 			// read and process the header
 			//if (saved == false) {
@@ -124,25 +124,21 @@ public class UrlCache {
 						// entry exist but no updates, do not download!
 						else {
 							System.out.println("Do not download " + url);
-							break;
 						}		
 					}	
+					if(tmp.contains("Content-Length")) {
+						String[] len = tmp.split(" ", 2);
+						length = Long.parseLong(len[1]);
+					}
 				}
 			//}
 			
 			// read and save the body to a file
 			if(download == true) {
-				byte[] bytes = new byte[(int) Math.pow(2, 16)];
-				int s = 0;
-				int bytesRead = 0;
+				
 				System.out.println("body");
 				// read the body as bytes and save into a byte array
-				do{
-					s = inputStream.read();
-					bytes[bytesRead] = (byte)s;			
-					bytesRead++;
-
-				}while (s != -1);
+				
 				
 				try {
 					// Make the necessary directories and files, then write the body into the file
@@ -151,7 +147,16 @@ public class UrlCache {
 					file.createNewFile();
 					
 					FileOutputStream fOut = new FileOutputStream(file);
-					fOut.write(bytes);
+					
+					byte[] bytes = new byte[10*1024];
+					int bytesRead = 0;
+					while ((bytesRead = inputStream.read(bytes)) > 0){
+						//bytes[bytesRead] = (byte)s;			
+						//bytesRead++;
+						fOut.write(bytes, 0, bytesRead);
+					}
+					//fOut.write(bytes);
+					//fOut.flush();
 					fOut.close();
 					
 				} catch (Exception e)	{
