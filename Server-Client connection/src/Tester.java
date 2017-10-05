@@ -22,10 +22,13 @@ public class Tester {
 						//quit loop
 						
 		};
-		//String[] url = {"people.ucalgary.ca/~mghaderi/index.html"};
+		
+		
+		
 		
 		// this is a very basic tester
 		// the TAs will use a more comprehensive set of tests
+		
 		try {
 			UrlCache cache = new UrlCache();
 			
@@ -39,6 +42,7 @@ public class Tester {
 		catch (IOException e) {
 			System.out.println("There was a problem: " + e.getMessage());
 		}
+		
 	}
 	
 }
