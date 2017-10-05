@@ -41,7 +41,7 @@ public class UrlCache {
 			else {
 				catalog = new HashMap<String, String>();
 				file.createNewFile();
-				System.out.println("made a new catalog");
+				//System.out.println("made a new catalog");
 			}
 		}
 		catch (Exception e) {
@@ -66,18 +66,15 @@ public class UrlCache {
 		
 		// Open a TCP connection to server
 		try{
-			boolean saved = false;
-			boolean download = false;
-				
 			Socket socket = new Socket (hostName, portNum);
 			OutputStream outStream = socket.getOutputStream();
 			InputStream inStream = socket.getInputStream();
-			byte[] bytes = new byte[10*1024];
+			byte[] bytes = new byte[20*1024];
 			
 			
 			// CONDITIONAL GET determines which request we will send, conditional or not
 			String HTTPrequest = getRequest(url, tokens);
-			System.out.println("Request: " + HTTPrequest);
+			//System.out.println("Request: " + HTTPrequest);
 			bytes = HTTPrequest.getBytes("US-ASCII");
 			
 			//send user input message to server. Flush to ensure message is sent
@@ -85,117 +82,57 @@ public class UrlCache {
 			outStream.flush();
 			
 			// reading the reply from server
-			String input = "";
-			int i = 0; int index = 0; int flag;
-			System.out.println("Response");
+			String response = "";
+			int i = 0;
+			//System.out.println("Response");
 			bytes = new byte[10*1024];
-			while((i = inStream.read(bytes)) != -1) {
-				input += new String(bytes);
-				index++;
-				System.out.println("input" +i +" = " + input);
-				
-				if (input.contains("\\r\\n\\r\\n")) 
-				{
-					System.out.println("Parse string? " + input);
-					flag = readHeader(input, url, saved);
-					System.out.println(input);
-					input = "";
-					index = 0;
-					if(flag == 0) saved = true;
-					if(flag == 1) download = true;
-				}
+			while((i = inStream.read(bytes)) != -1) 
+			{
+				response += new String(bytes);
+			}
+			//System.out.println("Response: " + response);
+			// Separating the header from the body
+			String[] parts = response.split("\\r\\n\\r\\n", 2);
+			String header = parts[0];//System.out.println("headerString: " + header);
+			//String body = parts[1];System.out.println("BodyString: " + body);
+			//System.out.print("header\n" + header);
+			
 					
-			}
+			// Process the header
+			boolean download = readHeader(header, url, catalog);
 			
-			
-			
-			
-			
-			
-			
-			
-			/*  REDO THIS PART!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-			int bytesRead = 0;
-			String tmp = "";
-			String lastMod = "";
-			long length;
-			
-			// read and process the header
-			BufferedReader inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-			
-			while(!(tmp=inputStream.readLine()).isEmpty()) {
-				// read and save the body to a file
-				if(download == true) {
-					// read the body as bytes and save into a byte array
+			// Download file if necessary
+			if(download == true) {
+				// read the body as bytes and save into a byte array
+				try {
+					// Make the necessary directories and files, then write the body into the file
+					File file = new File(System.getProperty("user.dir") +"\\src\\" + makeFileName(tokens)); // make directory in src directory
+					file.getParentFile().mkdirs();
+					file.createNewFile();
+					
+					FileOutputStream fOut = new FileOutputStream(file);
+					byte[] bodyBuff = new byte[10*1024];
+					
+					bodyBuff = parts[1].getBytes();  //store body as bytes again
 					try {
-						// Make the necessary directories and files, then write the body into the file
-						File file = new File(System.getProperty("user.dir") +"\\src\\" + makeFileName(tokens)); // make directory in src directory
-						file.getParentFile().mkdirs();
-						file.createNewFile();
-						
-						FileOutputStream fOut = new FileOutputStream(file);
-						InputStream in = socket.getInputStream();
-						bytes = new byte[10*1024];
-						int len = bytes.length;
-
-						while((bytesRead = in.read(bytes)) != -1){
-							fOut.write(bytes, 0, bytesRead);
-							
-						}
+						fOut.write(bodyBuff);
 						fOut.flush();
-						fOut.close();
-						inputStream.close();
-						out.close();
-						socket.close();
-					} catch (Exception e)	{
-						}
-					break;
-				}
+					}catch (Exception e) {}
+					
+					fOut.close();
+					
+				} catch (Exception e)	{}
 				
-				if(tmp.isEmpty()) 
-					break;
-				
-				// If request is OK, then check if catalog contains file 
-				if(tmp.contains("200 OK")) {
-					if(inCatalog(url)) 
-						saved = true; //System.out.println("saved = " + saved);
-				}
-				
-				else if (tmp.contains("304 OK"))
-					break;
-				
-				// process the last-modified line - check catalog
-				if(tmp.contains("Last-Modified")){
-					String[] temp= tmp.split(" ", 2);
-					lastMod = temp[1];
-					//System.out.println("lastmod = " + lastMod);
-					// No entry exists, save file and download OR entry exist and was updated, update mod date and download
-					if(saved == false || (saved == true && !(catalog.get(url).equals(lastMod)))){
-						//System.out.println("Adding new entry " + url + " " + lastMod);
-						catalog.put(url, lastMod);
-						saveCatalog();
-						download = true;
-					}
-					// entry exist but no updates, do not download!
-					else {
-						System.out.println("Do not download " + url);
-					}		
-				}	
-				
-				if(tmp.contains("Content-Length")) {
-					String[] len = tmp.split(" ", 2);
-					length = Long.parseLong(len[1]);
-				}
-				
+			inStream.close();
+			outStream.close();
+			socket.close();
+	
 			}
-			
-			
-			//Save catalog to file and close the input and output streams
-			//socket.close();
-			//inputStream.close();
-			//outputStream.close();
-			*/
+		
 		}
+			
+			
+			
 		catch (Exception e)
 		{
 			System.out.println("My Error: " + e.getMessage());
@@ -307,38 +244,49 @@ public class UrlCache {
  * 1 set download = true
  * -1 means do not download;
  */
-public int readHeader(String s, String url, boolean saved) {
-	int flag = -1;
-	// If request is OK, then check if catalog contains file 
-	if(s.contains("200 OK")) 
-	{
-		if(inCatalog(url)) 
-			flag = 0;
-			//saved = true; //System.out.println("saved = " + saved);
-	}
-	else if (s.contains("304 OK"))
-		flag = 0;
-	// process the last-modified line - check catalog
-	if(s.contains("Last-Modified"))
-	{
-		String[] temp= s.split(" ", 2);
-		String lastMod = temp[1];
-		//System.out.println("lastmod = " + lastMod);
-		// No entry exists, save file and download OR entry exist and was updated, update mod date and download
-		if(saved == false || (saved == true && !(catalog.get(url).equals(lastMod))))
+public boolean readHeader(String s, String url, HashMap<String, String> catalog) {
+	String[] lines = s.split("\r\n", 8);
+	int i = 0;
+	boolean saved = false; 
+	boolean download = false;
+	
+	while(i < lines.length) {
+		//System.out.println("line: " + lines[i]);
+		// If request is OK, then check if catalog contains file 
+		if(lines[i].contains("200 OK")) 
 		{
-			catalog.put(url, lastMod);
-			saveCatalog();
-			flag = 1;
-			
+			if(inCatalog(url)) 
+			{
+				saved = true; //System.out.println("saved = " + saved);
+			}
+				
 		}
-		// entry exist but no updates, do not download!
-		else  
+		else if (s.contains("304 OK"))
+			saved = true;
+		
+		// process the last-modified line - check catalog
+		else if(lines[i].contains("Last-Modified"))
 		{
-			System.out.println("Do not download " + url);
-		}	
+			String[] temp= lines[i].split(" ", 2);
+			String lastMod = temp[1];
+			//System.out.println("lastMod: " + lastMod);
+			// No entry exists, save file and download OR entry exist and was updated, update mod date and download
+			if(saved == false || (saved == true && !(catalog.get(url).equals(lastMod))))
+			{
+				catalog.put(url, lastMod);
+				saveCatalog();
+				download = true;
+			}
+			// entry exist but no updates, do not download!
+			else  
+			{
+				//System.out.println("Do not download " + url);
+				break;
+			}	
+		}
+		i++;
 	}
-	return flag;
+	return download;
 }
 	
 	
