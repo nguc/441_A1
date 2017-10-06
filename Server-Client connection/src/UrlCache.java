@@ -71,10 +71,8 @@ public class UrlCache {
 			InputStream inStream = socket.getInputStream();
 			byte[] bytes = new byte[20*1024];
 			
-			
 			// CONDITIONAL GET determines which request we will send, conditional or not
 			String HTTPrequest = getRequest(url, tokens);
-			//System.out.println("Request: " + HTTPrequest);
 			bytes = HTTPrequest.getBytes("US-ASCII");
 			
 			//send user input message to server. Flush to ensure message is sent
@@ -84,60 +82,55 @@ public class UrlCache {
 			// reading the reply from server
 			String response = "";
 			int i = 0;
-			//System.out.println("Response");
-			bytes = new byte[10*1024];
+			bytes = new byte[1000*1024];
+			int fileSize = 0;
+			
 			while((i = inStream.read(bytes)) != -1) 
 			{
+				fileSize += i;
 				response += new String(bytes);
+				//System.out.println("bytes read: " + i);
 			}
-			//System.out.println("Response: " + response);
-			// Separating the header from the body
+			//System.out.println("file: " + response);
+			// Separating the header from the body then process the header
 			String[] parts = response.split("\\r\\n\\r\\n", 2);
 			String header = parts[0];//System.out.println("headerString: " + header);
-			//String body = parts[1];System.out.println("BodyString: " + body);
-			//System.out.print("header\n" + header);
+			boolean download = true;
+			int headerSize = 0;
 			
-					
-			// Process the header
-			boolean download = readHeader(header, url, catalog);
+			int bodySize = processHeader(header, url, catalog);
 			
-			// Download file if necessary
-			if(download == true) {
-				// read the body as bytes and save into a byte array
-				try {
+			if (bodySize != -1) 
+				headerSize = fileSize - bodySize;
+			else
+				download = false;
+			//System.out.println("download: " + download);
+			// Start the download process
+			if(download == true) 
+			{
+				try 
+				{
 					// Make the necessary directories and files, then write the body into the file
 					File file = new File(System.getProperty("user.dir") +"\\src\\" + makeFileName(tokens)); // make directory in src directory
 					file.getParentFile().mkdirs();
 					file.createNewFile();
 					
 					FileOutputStream fOut = new FileOutputStream(file);
-					byte[] bodyBuff = new byte[10*1024];
 					
-					bodyBuff = parts[1].getBytes();  //store body as bytes again
-					try {
-						fOut.write(bodyBuff);
+					// read the body as bytes and save into a byte array
+					for(int index = headerSize; index < fileSize; index++)
+					{	
+						fOut.write(bytes[index]);
 						fOut.flush();
-					}catch (Exception e) {}
-					
+					}
 					fOut.close();
-					
-				} catch (Exception e)	{}
-				
+				} catch (Exception e){}
+			}
 			inStream.close();
 			outStream.close();
 			socket.close();
-	
-			}
-		
 		}
-			
-			
-			
-		catch (Exception e)
-		{
-			System.out.println("My Error: " + e.getMessage());
-		}
-		
+		catch (Exception e){ System.out.println("My Error: " + e.getMessage()); }
 	}
 	
     /**
@@ -240,15 +233,17 @@ public class UrlCache {
 	
 /*
  * reads and processes the header - returns an int depending on action
- * 0 set saved = true
- * 1 set download = true
- * -1 means do not download;
+ * -1 means file does not need to be downloaded
+ * >0 size of file to be downloaded
  */
-public boolean readHeader(String s, String url, HashMap<String, String> catalog) {
+public int processHeader(String s, String url, HashMap<String, String> catalog) {
 	String[] lines = s.split("\r\n", 8);
-	int i = 0;
-	boolean saved = false; 
+	String[] temp;
+	boolean saved = false;
 	boolean download = false;
+	int i = 0;
+	int count = -1;
+	
 	
 	while(i < lines.length) {
 		//System.out.println("line: " + lines[i]);
@@ -267,7 +262,7 @@ public boolean readHeader(String s, String url, HashMap<String, String> catalog)
 		// process the last-modified line - check catalog
 		else if(lines[i].contains("Last-Modified"))
 		{
-			String[] temp= lines[i].split(" ", 2);
+			temp= lines[i].split(" ", 2);
 			String lastMod = temp[1];
 			//System.out.println("lastMod: " + lastMod);
 			// No entry exists, save file and download OR entry exist and was updated, update mod date and download
@@ -284,9 +279,14 @@ public boolean readHeader(String s, String url, HashMap<String, String> catalog)
 				break;
 			}	
 		}
+		else if (lines[i].contains("Content-Length") && download == true) 
+		{
+			temp = lines[i].split(" ",2);
+			count = Integer.parseInt(temp[1]);
+		}
 		i++;
 	}
-	return download;
+	return count;
 }
 	
 	
