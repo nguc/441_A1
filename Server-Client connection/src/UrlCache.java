@@ -1,8 +1,15 @@
 
 /**
+ * Author: Chi Nguyen
+ * ID#: 10032932
+ * 
+ * CPSC 441 Assignment 1
  * UrlCache Class
  * 
- *
+ * This program opens a TCP connection between a client and server then creates a request 
+ * for an object from the server, the program examines the response from the server as well as
+ * a catalog, if it previously existed, to determine if it should download the object
+ * 
  */
 
 import java.io.*;
@@ -12,44 +19,39 @@ import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
 
 public class UrlCache {
-	//check
+	
 	HashMap<String, String> catalog = null;
 	
-    /**
-     * Default constructor to initialize data structures used for caching/etc
+	/**
+	 * Default constructor to initialize data structures used for caching/etc
 	 * If the cache already exists then load it. If any errors then throw runtime exception.
 	 *
-     * @throws IOException if encounters any errors/exceptions
-     */
-	public UrlCache() throws IOException {		
-		//System.out.println("user.dir = " + System.getProperty("user.dir")+"\\src");
-		
+	 * @throws IOException if encounters any errors/exceptions
+	 */
+	public UrlCache() throws IOException 
+	{		
 		File file = new File( System.getProperty("user.dir") + "/src/catalog.ser");
-		//System.out.println("Parent file " + file.getParentFile());
-		try {
-			// load catalog from saved file if it exists
-			if(file.exists()) {
+
+		try 
+		{
+			
+			if(file.exists()) // read data from exisitng catalog
+			{
 				FileInputStream fIn = new FileInputStream(file);
 				ObjectInputStream oIn = new ObjectInputStream(fIn);
-				catalog = (HashMap) oIn.readObject();
 				
-				//System.out.println("using old catalog");
+				catalog = (HashMap) oIn.readObject();
 				oIn.close();
 				fIn.close();
 			}
-			// create new catalog
-			else {
+			else // create new catalog
+			{
 				catalog = new HashMap<String, String>();
 				file.createNewFile();
-				//System.out.println("made a new catalog");
 			}
-		}
-		catch (Exception e) {
-			throw new RuntimeException("Program Error");
-		}
+		}catch (Exception e) { throw new RuntimeException("Program Error"); }
 	}
 	
-
 	
     /**
      * Downloads the object specified by the parameter url if the local copy is out of date.
@@ -57,15 +59,19 @@ public class UrlCache {
      * @param url	URL of the object to be downloaded. It is a fully qualified URL.
      * @throws IOException if encounters any errors/exceptions
      */
-	public void getObject(String url) throws IOException {
-		
-		String[] tokens = url.split("/|:");// parse the url by / and : to get the separate tokens
+	public void getObject(String url) throws IOException 
+	{
+		// parse the url by / and : to get the separate tokens
+		String[] tokens = url.split("/|:");
 		String hostName = tokens[0];
 		String fileName = tokens[tokens.length -1];
-		int portNum = getPortNumber(tokens[1]); // checks if 2nd token is a specific port number and sets it, else use port 80
+		
+		// checks if 2nd token is a specific port number and sets it, else use port 80
+		int portNum = getPortNumber(tokens[1]); 
 		
 		// Open a TCP connection to server
-		try{
+		try
+		{
 			Socket socket = new Socket (hostName, portNum);
 			OutputStream outStream = socket.getOutputStream();
 			InputStream inStream = socket.getInputStream();
@@ -81,30 +87,31 @@ public class UrlCache {
 			
 			// reading the reply from server
 			String response = "";
-			int i = 0;
 			bytes = new byte[1000*1024];
 			int fileSize = 0;
+			int i = 0;
 			
 			while((i = inStream.read(bytes)) != -1) 
 			{
 				fileSize += i;
 				response += new String(bytes);
-				//System.out.println("bytes read: " + i);
 			}
-			//System.out.println("file: " + response);
-			// Separating the header from the body then process the header
+			
+			// Separating the header from the body
 			String[] parts = response.split("\\r\\n\\r\\n", 2);
-			String header = parts[0];//System.out.println("headerString: " + header);
+			String header = parts[0];
 			boolean download = true;
 			int headerSize = 0;
 			
+			//  process the header and return the size of the body
 			int bodySize = processHeader(header, url, catalog);
 			
+			// Determine if file needs to be downloaded or not
 			if (bodySize != -1) 
 				headerSize = fileSize - bodySize;
 			else
 				download = false;
-			//System.out.println("download: " + download);
+
 			// Start the download process
 			if(download == true) 
 			{
@@ -126,11 +133,12 @@ public class UrlCache {
 					fOut.close();
 				} catch (Exception e){}
 			}
+			
 			inStream.close();
 			outStream.close();
 			socket.close();
-		}
-		catch (Exception e){ System.out.println("My Error: " + e.getMessage()); }
+			
+		}catch (Exception e){ System.out.println("My Error: " + e.getMessage()); }
 	}
 	
     /**
@@ -139,12 +147,10 @@ public class UrlCache {
      * @param url 	URL of the object 
 	 * @return the Last-Modified time in millisecond as in Date.getTime()
      */
-	public long getLastModified(String url) {
-		
+	public long getLastModified(String url) 
+	{
 		long millis = 0;
-		
 		String lastMod = catalog.get(url);
-		//System.out.println("lastMOd string is: " + lastMod);
 		SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy hh:mm:ss zzz");
 		Date date = format.parse(lastMod, new ParsePosition(0));
 		millis = date.getTime();
@@ -152,38 +158,47 @@ public class UrlCache {
 		return millis;
 	}
 	
+
+	
 	/**
 	 * Returns a boolean value based on if the String given specifies a port number or not
 	 * 
-	 * @param token a String parsed from the given url string
+	 * @param token  a string, parsed from the given url string
 	 * @return true if string is an int else, returns false
 	 */
-	public boolean hasPortNumber(String token) {
-		// return default port number 80 
+	public boolean hasPortNumber(String token) 
+	{
 		if (!Character.isDigit(token.charAt(0)))
 			return false;
 		else 
 			return true;
 	}
+	
+	
 	/**
 	* Returns the port number specified in the url, else return 80 as the default port number
 	* 
-	* @param tokens  list of tokens from parsed url
+	* @param token  a string from the parsed url
 	* @return specified port number or default port number (80)
 	*/
-	public int getPortNumber(String token) {
-		// return the specified port number
-		if (hasPortNumber(token))
+	public int getPortNumber(String token)
+	{
+		if (hasPortNumber(token))	// return the specified port number
 			return Integer.parseInt(token);
-		// return default port number 80 
-		else
+		
+		else						// return default port number 80 
 			return 80;
 	}
-
+	
+	
 	/* 
 	 * Returns the pathname of the object
+	 * 
+	 * @param tokens  a string array containing parts of a parsed url 
+	 * @return a string that contains the pathname of the object
 	 */
-	public String getPathname(String[] tokens) {
+	public String getPathname(String[] tokens) 
+	{
 		String request = "";
 		int i;
 		
@@ -201,14 +216,30 @@ public class UrlCache {
 	}
 	
 	
-	public String makeFileName(String[] tokens) {
+	/*
+	 * returns a name used to create a file
+	 * 
+	 * @param tokens  a string array containing parts of a parsed url
+	 * @return a string containing the hostname and pathname of the object
+	 */
+	public String makeFileName(String[] tokens) 
+	{
 		String filename  = tokens[0] + getPathname(tokens);
 		return filename;
 	}
 	
 	
-	public String getRequest(String url, String[] tokens) {
+	/*
+	 * returns a string containing an HTTP request
+	 * 
+	 * @param url a string containing the url of an object
+	 * @param tokens an array of strings 
+	 * @return a string containing the GET, Host, and condition parts of the HTTP request
+	 */
+	public String getRequest(String url, String[] tokens) 
+	{
 		boolean saved = inCatalog(url);
+		
 		String get = "GET " + getPathname(tokens)+ " HTTP/1.1\r\n";
 		String host = "Host: " + tokens[0] + "\r\n";
 		String cond = "If-Modified-Since: " + catalog.get(url)+ "\r\n\r\n";
@@ -218,82 +249,37 @@ public class UrlCache {
 			request = get + host + cond;
 		else
 			request = get + host + "\r\n";
+		
 		return request;
 	}
 	
 	
-	// checks if catalog contains an entry of the request
-	public boolean inCatalog(String url) {
+	/*
+	 *  Checks if the catalog contains an entry of the request object
+	 *  
+	 *  @param url a string containing the url of the object
+	 *  @return a boolean that indicates if object entry exist in the catalog
+	 */
+	public boolean inCatalog(String url) 
+	{
 		String value = null;
+		
 		value = catalog.get(url);
+		
 		if (value != null)
 			return true;
 		return false;
 	}
 	
-/*
- * reads and processes the header - returns an int depending on action
- * -1 means file does not need to be downloaded
- * >0 size of file to be downloaded
- */
-public int processHeader(String s, String url, HashMap<String, String> catalog) {
-	String[] lines = s.split("\r\n", 8);
-	String[] temp;
-	boolean saved = false;
-	boolean download = false;
-	int i = 0;
-	int count = -1;
 	
-	
-	while(i < lines.length) {
-		//System.out.println("line: " + lines[i]);
-		// If request is OK, then check if catalog contains file 
-		if(lines[i].contains("200 OK")) 
-		{
-			if(inCatalog(url)) 
-			{
-				saved = true; //System.out.println("saved = " + saved);
-			}
-				
-		}
-		else if (s.contains("304 OK"))
-			saved = true;
-		
-		// process the last-modified line - check catalog
-		else if(lines[i].contains("Last-Modified"))
-		{
-			temp= lines[i].split(" ", 2);
-			String lastMod = temp[1];
-			//System.out.println("lastMod: " + lastMod);
-			// No entry exists, save file and download OR entry exist and was updated, update mod date and download
-			if(saved == false || (saved == true && !(catalog.get(url).equals(lastMod))))
-			{
-				catalog.put(url, lastMod);
-				saveCatalog();
-				download = true;
-			}
-			// entry exist but no updates, do not download!
-			else  
-			{
-				//System.out.println("Do not download " + url);
-				break;
-			}	
-		}
-		else if (lines[i].contains("Content-Length") && download == true) 
-		{
-			temp = lines[i].split(" ",2);
-			count = Integer.parseInt(temp[1]);
-		}
-		i++;
-	}
-	return count;
-}
-	
-	
-	
-	public void saveCatalog() {
+	/*
+	 * Serializes the data in the Hashmap and writes it to a .ser file
+	 */
+	public void saveCatalog() 
+	{
 		String curDir = System.getProperty("user.dir");
 		File file = new File(curDir + "/src/catalog.ser");
+		
 		try {
 			FileOutputStream fOut = new FileOutputStream(file);
 			ObjectOutputStream oOut = new ObjectOutputStream(fOut);
@@ -301,6 +287,62 @@ public int processHeader(String s, String url, HashMap<String, String> catalog) 
 			oOut.close();
 			fOut.close();
 		}catch(IOException e) {e.printStackTrace();}
+	}
+	
+	
+	/*
+	 * reads and processes the header information
+	 * 
+	 * @param s a string containing all the header information
+	 * @param url a string containing the url of an object
+	 * @param catalog a hashmap that contains strings for url and last-modified 
+	 * 
+	 * @return a value corresponding to the size of the body or -1, which means do not download file
+	 */
+	public int processHeader(String s, String url, HashMap<String, String> catalog)
+	{
+		String[] lines = s.split("\r\n", 8);
+		String[] temp;
+		boolean saved = false;
+		boolean download = false;
+		int i = 0;
+		int count = -1;
+		
+		while(i < lines.length) 
+		{
+			// If request is OK, then check if catalog contains file 
+			if(lines[i].contains("200 OK")) 
+			{
+				if(inCatalog(url)) 		
+					saved = true;
+			}
+			
+			else if (s.contains("304 OK"))
+				saved = true;
+			
+			else if(lines[i].contains("Last-Modified"))
+			{
+				temp= lines[i].split(" ", 2);
+				String lastMod = temp[1];
+				
+				// No entry exists, save file and download OR entry exist and was updated, update mod date and download
+				if(saved == false || (saved == true && !(catalog.get(url).equals(lastMod))))
+				{
+					catalog.put(url, lastMod);
+					saveCatalog();
+					download = true;
+				}
+				else  		// entry exist but no updates, do not download!
+					break;
+			}
+			else if (lines[i].contains("Content-Length") && download == true) 
+			{
+				temp = lines[i].split(" ",2);
+				count = Integer.parseInt(temp[1]);
+			}
+			i++;
+		}
+		return count;
 	}
 	
 }
