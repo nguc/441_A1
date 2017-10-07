@@ -20,7 +20,7 @@ import java.text.SimpleDateFormat;
 
 public class UrlCache {
 	
-	HashMap<String, String> catalog = null;
+	HashMap<String, String> catalog;
 	
 	/**
 	 * Default constructor to initialize data structures used for caching/etc
@@ -30,26 +30,24 @@ public class UrlCache {
 	 */
 	public UrlCache() throws IOException 
 	{		
-		File file = new File( System.getProperty("user.dir") + "/src/catalog.ser");
-
 		try 
 		{
+			//File file = new File( System.getProperty("user.dir") + "/src/catalog.ser");
 			
-			if(file.exists()) // read data from exisitng catalog
-			{
-				FileInputStream fIn = new FileInputStream(file);
-				ObjectInputStream oIn = new ObjectInputStream(fIn);
-				
-				catalog = (HashMap) oIn.readObject();
-				oIn.close();
-				fIn.close();
-			}
-			else // create new catalog
-			{
+			FileInputStream fIn = new FileInputStream("catalog.ser");
+			ObjectInputStream oIn = new ObjectInputStream(fIn);
+			catalog = (HashMap<String, String>) oIn.readObject();
+			oIn.close();
+			fIn.close();
+		
+		}	
+		catch (FileNotFoundException e)
+		{
 				catalog = new HashMap<String, String>();
-				file.createNewFile();
-			}
-		}catch (Exception e) { throw new RuntimeException("Program Error"); }
+		}
+		catch (Exception e) {
+			System.out.println("Cache Error: " + e.getMessage()); 
+		}
 	}
 	
 	
@@ -77,68 +75,118 @@ public class UrlCache {
 			InputStream inStream = socket.getInputStream();
 			byte[] bytes = new byte[20*1024];
 			
-			// CONDITIONAL GET determines which request we will send, conditional or not
+			// add CONDITIONAL GET to request
 			String HTTPrequest = getRequest(url, tokens);
+			//System.out.println(HTTPrequest);
 			bytes = HTTPrequest.getBytes("US-ASCII");
 			
 			//send user input message to server. Flush to ensure message is sent
 			outStream.write(bytes);
 			outStream.flush();
 			
-			// reading the reply from server
+			// reading the reply from server	
+			bytes = new byte[2*1024];
 			String response = "";
-			bytes = new byte[1000*1024];
-			int fileSize = 0;
-			int i = 0;
+			int offset = 0;
+			boolean readRN = false;
+			int r = 0;
 			
-			while((i = inStream.read(bytes)) != -1) 
+			// reading stream 1 byte at a time until we find the sequence 13 10 13 10 which corresponds to \r\n\r\n
+			while((r = inStream.read(bytes, offset, 1)) != -1) 
 			{
-				fileSize += i;
-				response += new String(bytes);
-			}
-			
-			// Separating the header from the body
-			String[] parts = response.split("\\r\\n\\r\\n", 2);
-			String header = parts[0];
-			boolean download = true;
-			int headerSize = 0;
-			
-			//  process the header and return the size of the body
-			int bodySize = processHeader(header, url, catalog);
-			
-			// Determine if file needs to be downloaded or not
-			if (bodySize != -1) 
-				headerSize = fileSize - bodySize;
-			else
-				download = false;
-
-			// Start the download process
-			if(download == true) 
-			{
-				try 
+				if(readRN && bytes[offset] == 10) 
 				{
+					response = new String(bytes, "UTF-8");
+					break;
+				}
+				
+				if(readRN && bytes[offset] != 13)
+					readRN = false;
+					
+				if(bytes[offset] == 10)	// \n was read
+					readRN = true;
+				
+				offset++;
+			}
+			// Split header into its separate lines
+			String[] headerParts = response.split("\r\n");
+			int contentLen = 0;
+			String lastMod = "";
+			
+			// if file not modified then do not download
+			if(headerParts[0].contains("304")) 
+			{
+				System.out.println("Don't download");
+			}	
+			
+			if(headerParts[0].contains("200")) 
+			{
+				String[] temp;
+				// process the rest of the header
+				for(int i = 1; i < headerParts.length; i ++)
+				{
+					if(headerParts[i].contains("Last-Modified"))
+					{
+						temp= headerParts[i].split(" ", 2);
+						lastMod = temp[1];
+					}
+					if(headerParts[i].contains("Content-Length"))
+					{
+						temp = headerParts[i].split(" ",2);
+						contentLen = Integer.parseInt(temp[1]);
+					}
+				}
+				
+				// update last mod date in catalog and start downloading file
+				if(catalog.get(url) == null || !(catalog.get(url).equals(lastMod)))
+				{
+					catalog.put(url, lastMod);
+					
 					// Make the necessary directories and files, then write the body into the file
-					File file = new File(System.getProperty("user.dir") +"\\src\\" + makeFileName(tokens)); // make directory in src directory
+					//File file = new File(System.getProperty("user.dir") +"\\src\\" + makeFileName(tokens)); // make directory in src directory
+					File file = new File(tokens[0] + getPathname(tokens));
 					file.getParentFile().mkdirs();
 					file.createNewFile();
-					
 					FileOutputStream fOut = new FileOutputStream(file);
 					
-					// read the body as bytes and save into a byte array
-					for(int index = headerSize; index < fileSize; index++)
+					int count = 0;
+					int bytesRead = 0;
+					bytes = new byte[1024];
+					
+					// keep reading the stream until the whole body is read
+					while(bytesRead != -1)
 					{	
-						fOut.write(bytes[index]);
-						fOut.flush();
+						if(count >= contentLen)
+							break;
+						try 
+						{
+							bytesRead = inStream.read(bytes);
+							fOut.write(bytes);
+							fOut.flush();
+							fOut.getFD().sync();
+							//System.out.println("bytesRead = " + bytesRead);
+							count += bytesRead;
+						}
+						catch (Exception e)
+						{ 
+							System.out.println("file write error: " + e.getMessage()); 
+						}
+						
 					}
+					//System.out.println("count = " + count);
 					fOut.close();
-				} catch (Exception e){}
+					
+				}
 			}
-			
+			saveCatalog();
 			inStream.close();
 			outStream.close();
 			socket.close();
-			
-		}catch (Exception e){ System.out.println("My Error: " + e.getMessage()); }
+		}
+		catch (Exception e)
+		{ 
+			System.out.println("getObject error: " + e.getMessage()); 
+		}
 	}
 	
     /**
@@ -262,12 +310,9 @@ public class UrlCache {
 	 */
 	public boolean inCatalog(String url) 
 	{
-		String value = null;
-		
-		value = catalog.get(url);
-		
-		if (value != null)
+		if (catalog.get(url) != null)
 			return true;
+		
 		return false;
 	}
 	
@@ -277,11 +322,11 @@ public class UrlCache {
 	 */
 	public void saveCatalog() 
 	{
-		String curDir = System.getProperty("user.dir");
-		File file = new File(curDir + "/src/catalog.ser");
+		//String curDir = System.getProperty("user.dir");
+		//File file = new File(curDir + "/src/catalog.ser");
 		
 		try {
-			FileOutputStream fOut = new FileOutputStream(file);
+			FileOutputStream fOut = new FileOutputStream("catalog.ser");
 			ObjectOutputStream oOut = new ObjectOutputStream(fOut);
 			oOut.writeObject(catalog);
 			oOut.close();
@@ -289,60 +334,5 @@ public class UrlCache {
 		}catch(IOException e) {e.printStackTrace();}
 	}
 	
-	
-	/*
-	 * reads and processes the header information
-	 * 
-	 * @param s a string containing all the header information
-	 * @param url a string containing the url of an object
-	 * @param catalog a hashmap that contains strings for url and last-modified 
-	 * 
-	 * @return a value corresponding to the size of the body or -1, which means do not download file
-	 */
-	public int processHeader(String s, String url, HashMap<String, String> catalog)
-	{
-		String[] lines = s.split("\r\n", 8);
-		String[] temp;
-		boolean saved = false;
-		boolean download = false;
-		int i = 0;
-		int count = -1;
-		
-		while(i < lines.length) 
-		{
-			// If request is OK, then check if catalog contains file 
-			if(lines[i].contains("200 OK")) 
-			{
-				if(inCatalog(url)) 		
-					saved = true;
-			}
-			
-			else if (s.contains("304 OK"))
-				saved = true;
-			
-			else if(lines[i].contains("Last-Modified"))
-			{
-				temp= lines[i].split(" ", 2);
-				String lastMod = temp[1];
-				
-				// No entry exists, save file and download OR entry exist and was updated, update mod date and download
-				if(saved == false || (saved == true && !(catalog.get(url).equals(lastMod))))
-				{
-					catalog.put(url, lastMod);
-					saveCatalog();
-					download = true;
-				}
-				else  		// entry exist but no updates, do not download!
-					break;
-			}
-			else if (lines[i].contains("Content-Length") && download == true) 
-			{
-				temp = lines[i].split(" ",2);
-				count = Integer.parseInt(temp[1]);
-			}
-			i++;
-		}
-		return count;
-	}
 	
 }
